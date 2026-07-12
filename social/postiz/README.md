@@ -15,7 +15,8 @@ network access.
 - `calendar.json` — the generated 270-post calendar (committed so it
   persists). 90 days × 3 slots/day, Jul 8 – Oct 5 2026, 8am / 12pm / 6pm PT.
 - `schedule_posts.py` — resolves TikTok/Instagram channel IDs from
-  `GET /channels`, then loops `POST /posts` for every calendar entry.
+  `GET /public/v1/integrations`, then loops `POST /public/v1/posts` for
+  every calendar entry.
 
 ## Calendar structure
 
@@ -54,15 +55,15 @@ is generated at run time — it isn't committed.
 
 ## Endpoint assumption to double check
 
-The task that produced this asked to verify connectivity against
-`GET https://api.postiz.com/channels`, so that's the default in
-`schedule_posts.py`. Postiz's public API has historically lived under a
-`/public/v1/` prefix (`/public/v1/integrations`, `/public/v1/posts`). Since
-the authoring environment never reached the real server, this could not be
-confirmed. If the bare paths 404 when you run this for real, edit
-`CHANNELS_URL` / `POSTS_URL` at the top of `schedule_posts.py` to add the
-`/public/v1/` prefix — everything else (auth header, payload shape, channel
-matching) stays the same.
+`schedule_posts.py` uses Postiz's public API under the `/public/v1/` prefix:
+`GET /public/v1/integrations` for channel lookup, `POST /public/v1/posts`
+for scheduling. This still couldn't be verified end-to-end from the
+authoring environment — network to `api.postiz.com` is blocked there
+regardless of path (`curl: (56) CONNECT tunnel failed, response 403`, a
+proxy policy denial, not a Postiz-side error). If either call 404s, or the
+response shape doesn't match what `match_channel()` / `build_post_payload()`
+expect, check Postiz's current API docs and adjust `CHANNELS_URL` /
+`POSTS_URL` at the top of `schedule_posts.py` accordingly.
 
 ## Channel matching
 

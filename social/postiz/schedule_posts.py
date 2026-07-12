@@ -22,15 +22,15 @@ Usage:
 Never hardcode the API key in this file or in calendar.json -- it is read
 only from the POSTIZ_API_KEY environment variable.
 
-Endpoint note: the task that generated this script specified
-GET https://api.postiz.com/channels as the connectivity/channel-lookup
-call, so that's what CHANNELS_URL below uses by default. Postiz's public
-API has historically lived under a /public/v1/ prefix
-(https://api.postiz.com/public/v1/integrations,
-https://api.postiz.com/public/v1/posts) -- if the bare paths 404 when you
-run this for real, switch CHANNELS_URL/POSTS_URL to that prefix. This
-could not be verified from the authoring environment since it never
-reached the real server.
+Endpoint note: uses Postiz's public API under the /public/v1/ prefix
+(https://api.postiz.com/public/v1/integrations for channel lookup,
+https://api.postiz.com/public/v1/posts for scheduling). This still could
+not be verified end-to-end from the authoring environment -- network to
+api.postiz.com is blocked there regardless of path -- so if either call
+404s or the response shape doesn't match what match_channel()/
+build_post_payload() expect, check Postiz's current API docs and adjust
+CHANNELS_URL/POSTS_URL and the parsing in test_connection()/match_channel()
+accordingly.
 """
 import argparse
 import csv
@@ -44,8 +44,8 @@ import urllib.request
 import urllib.error
 
 BASE_URL = "https://api.postiz.com"
-CHANNELS_URL = f"{BASE_URL}/channels"
-POSTS_URL = f"{BASE_URL}/posts"
+CHANNELS_URL = f"{BASE_URL}/public/v1/integrations"
+POSTS_URL = f"{BASE_URL}/public/v1/posts"
 
 CALENDAR_PATH = Path(__file__).parent / "calendar.json"
 RESULTS_PATH = Path(__file__).parent / "schedule_results.csv"
