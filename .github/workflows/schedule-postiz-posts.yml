@@ -1,0 +1,45 @@
+name: Schedule Postiz Posts
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "What to run"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - test-2-posts
+          - full-run
+          - resume
+
+jobs:
+  schedule:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run scheduler
+        env:
+          POSTIZ_API_KEY: ${{ secrets.POSTIZ_API_KEY }}
+        working-directory: social/postiz
+        run: |
+          case "${{ inputs.mode }}" in
+            dry-run)      python3 schedule_posts.py --dry-run ;;
+            test-2-posts) python3 schedule_posts.py --limit 2 ;;
+            full-run)     python3 schedule_posts.py ;;
+            resume)       python3 schedule_posts.py --resume ;;
+          esac
+
+      - name: Upload results log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: schedule-results-${{ github.run_id }}
+          path: social/postiz/schedule_results.csv
+          if-no-files-found: ignore
