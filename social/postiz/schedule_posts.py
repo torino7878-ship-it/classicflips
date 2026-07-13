@@ -31,6 +31,17 @@ api.postiz.com is blocked there regardless of path -- so if either call
 build_post_payload() expect, check Postiz's current API docs and adjust
 CHANNELS_URL/POSTS_URL and the parsing in test_connection()/match_channel()
 accordingly.
+
+Images: TikTok (and likely Instagram) reject text-only posts, so every
+post needs media attached. pillar_images.json maps each of the 8 car
+pillars to a source image URL. This script downloads each pillar's image
+once per run and uploads it to Postiz's media library via UPLOAD_URL,
+then reuses that uploaded reference for every post in that pillar. Same
+caveat as the endpoints above: UPLOAD_URL and the exact shape Postiz
+expects inside posts[].value[].image were not verifiable from the
+authoring environment -- if upload_media() 404s or the post payload's
+image field gets rejected, check Postiz's docs for the real upload
+endpoint/response shape and adjust upload_media()/build_post_payload().
 """
 import argparse
 import csv
@@ -46,9 +57,11 @@ import urllib.error
 BASE_URL = "https://api.postiz.com"
 CHANNELS_URL = f"{BASE_URL}/public/v1/integrations"
 POSTS_URL = f"{BASE_URL}/public/v1/posts"
+UPLOAD_URL = f"{BASE_URL}/public/v1/upload"
 
 CALENDAR_PATH = Path(__file__).parent / "calendar.json"
 RESULTS_PATH = Path(__file__).parent / "schedule_results.csv"
+PILLAR_IMAGES_PATH = Path(__file__).parent / "pillar_images.json"
 
 TIKTOK_HANDLE = "appleuser25996918"
 INSTAGRAM_HANDLE = "biz.7878"
@@ -134,6 +147,57 @@ def match_channel(channels: list, handle: str, provider_hint: str) -> dict:
     return candidates[0]
 
 
+def _guess_content_type(url: str) -> str:
+    ext = url.rsplit(".", 1)[-1].split("?")[0].lower()
+    return {
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "webp": "image/webp",
+    }.get(ext, "application/octet-stream")
+
+
+def upload_media(url: str, api_key: str) -> dict:
+    """Downloads an image from `url` and uploads it to Postiz's media
+    library. Returns whatever JSON object Postiz's upload endpoint
+    responds with -- assumed to be droppable as-is into a post's
+    value[].image array (see UPLOAD_URL note in the module docstring)."""
+    with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT) as resp:
+        content = resp.read()
+
+    filename = url.rsplit("/", 1)[-1].split("?")[0]
+    content_type = _guess_content_type(url)
+    boundary = "----classicflips-boundary-" + os.urandom(8).hex()
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+        f"Content-Type: {content_type}\r\n\r\n"
+    ).encode("utf-8") + content + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+    req = urllib.request.Request(UPLOAD_URL, data=body, method="POST")
+    req.add_header("Authorization", api_key)
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
+        raw = resp.read().decode("utf-8")
+        return json.loads(raw) if raw else {}
+
+
+def resolve_pillar_images(api_key: str, pillars: set) -> dict:
+    pillar_urls = json.loads(PILLAR_IMAGES_PATH.read_text())
+    refs = {}
+    for pillar in sorted(pillars):
+        url = pillar_urls.get(pillar)
+        if not url:
+            print(f"  WARNING: no image configured for pillar '{pillar}' -- posting without image", file=sys.stderr)
+            continue
+        print(f"  Uploading image for pillar '{pillar}'...")
+        media = upload_media(url, api_key)
+        refs[pillar] = media
+        print(f"    -> {json.dumps(media)}")
+    return refs
+
+
 def resolve_channel_ids(api_key: str) -> dict:
     channels = test_connection(api_key)
     tiktok = match_channel(channels, TIKTOK_HANDLE, "tiktok")
@@ -165,7 +229,8 @@ PLATFORM_SETTINGS = {
 }
 
 
-def build_post_payload(post: dict, channel_ids: dict) -> dict:
+def build_post_payload(post: dict, channel_ids: dict, image_ref: dict | None) -> dict:
+    image_list = [image_ref] if image_ref else []
     return {
         "type": "schedule",
         "date": post["scheduled_at_utc"],
@@ -174,7 +239,7 @@ def build_post_payload(post: dict, channel_ids: dict) -> dict:
         "posts": [
             {
                 "integration": {"id": channel_ids[platform]},
-                "value": [{"content": post["caption"], "image": []}],
+                "value": [{"content": post["caption"], "image": image_list}],
                 "settings": PLATFORM_SETTINGS.get(platform, {}),
             }
             for platform in post["platforms"]
@@ -223,6 +288,9 @@ def main():
 
     channel_ids = resolve_channel_ids(api_key)
 
+    needed_pillars = {post["pillar"] for post in posts}
+    image_refs = resolve_pillar_images(api_key, needed_pillars)
+
     already_done = load_already_posted(args.resume)
     if already_done:
         print(f"Resuming: skipping {len(already_done)} posts already marked ok")
@@ -237,7 +305,7 @@ def main():
             skip_count += 1
             continue
 
-        payload = build_post_payload(post, channel_ids)
+        payload = build_post_payload(post, channel_ids, image_refs.get(post["pillar"]))
         print(f"[{i}/{len(posts)}] {post_id} @ {post['scheduled_at_pt']} ({post['pillar_name']})")
 
         if args.dry_run:
