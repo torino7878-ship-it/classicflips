@@ -98,7 +98,7 @@ def test_connection(api_key: str) -> list:
 
 
 def _channel_text_blob(channel: dict) -> str:
-    fields = ["username", "handle", "name", "displayName", "identifier", "customer"]
+    fields = ["username", "handle", "name", "displayName", "identifier", "customer", "profile"]
     parts = []
     for f in fields:
         v = channel.get(f)
@@ -108,7 +108,7 @@ def _channel_text_blob(channel: dict) -> str:
 
 
 def _channel_provider(channel: dict) -> str:
-    for f in ("providerIdentifier", "provider", "integration", "type"):
+    for f in ("providerIdentifier", "provider", "integration", "type", "identifier"):
         v = channel.get(f)
         if isinstance(v, str):
             return v.lower()
