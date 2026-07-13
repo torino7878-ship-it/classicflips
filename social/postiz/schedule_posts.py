@@ -145,13 +145,38 @@ def resolve_channel_ids(api_key: str) -> dict:
     return {"tiktok": tiktok_id, "instagram": instagram_id}
 
 
+# Per-platform "settings" required by Postiz's public API validation.
+# TikTok's fields mirror TikTok's own Content Posting API disclosure/
+# permission requirements; Instagram just needs a post_type.
+PLATFORM_SETTINGS = {
+    "tiktok": {
+        "privacy_level": "PUBLIC_TO_EVERYONE",
+        "duet": False,
+        "stitch": False,
+        "comment": True,
+        "autoAddMusic": "no",
+        "brand_content_toggle": False,
+        "brand_organic_toggle": False,
+        "content_posting_method": "DIRECT_POST",
+    },
+    "instagram": {
+        "post_type": "post",
+    },
+}
+
+
 def build_post_payload(post: dict, channel_ids: dict) -> dict:
     return {
         "type": "schedule",
         "date": post["scheduled_at_utc"],
-        "tags": [post["pillar"]],
+        "shortLink": False,
+        "tags": [],
         "posts": [
-            {"integration": {"id": channel_ids[platform]}, "value": [{"content": post["caption"]}]}
+            {
+                "integration": {"id": channel_ids[platform]},
+                "value": [{"content": post["caption"], "image": []}],
+                "settings": PLATFORM_SETTINGS.get(platform, {}),
+            }
             for platform in post["platforms"]
         ],
     }
