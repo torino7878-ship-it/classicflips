@@ -14,6 +14,10 @@ on:
           - full-run
           - resume
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   schedule:
     runs-on: ubuntu-latest
@@ -23,6 +27,28 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      # Each run starts from a fresh checkout, so schedule_results.csv
+      # (which --resume reads to know what's already posted) doesn't
+      # exist yet. Pull it back from the most recent prior run's
+      # uploaded artifact before resuming, otherwise --resume has
+      # nothing to skip and re-posts (duplicates) everything that
+      # already succeeded.
+      - name: Restore previous results (resume mode only)
+        if: inputs.mode == 'resume'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ARTIFACT_ID=$(gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '[.artifacts[] | select(.name | startswith("schedule-results-")) | select(.expired == false)] | sort_by(.created_at) | last | .id // empty')
+          if [ -n "$ARTIFACT_ID" ]; then
+            echo "Restoring schedule_results.csv from artifact $ARTIFACT_ID"
+            gh api "repos/${{ github.repository }}/actions/artifacts/$ARTIFACT_ID/zip" > /tmp/prev-results.zip
+            unzip -o /tmp/prev-results.zip -d social/postiz/
+            echo "Restored -- $(($(wc -l < social/postiz/schedule_results.csv) - 1)) prior result rows."
+          else
+            echo "No previous results artifact found -- resume will start from scratch (nothing to skip)."
+          fi
 
       - name: Run scheduler
         env:
