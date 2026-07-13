@@ -15,8 +15,13 @@ network access.
 - `calendar.json` — the generated 270-post calendar (committed so it
   persists). 90 days × 3 slots/day, Jul 8 – Oct 5 2026, 8am / 12pm / 6pm PT.
 - `schedule_posts.py` — resolves TikTok/Instagram channel IDs from
-  `GET /public/v1/integrations`, then loops `POST /public/v1/posts` for
-  every calendar entry.
+  `GET /public/v1/integrations`, uploads each pillar's image to Postiz's
+  media library, then loops `POST /public/v1/posts` for every calendar
+  entry.
+- `pillar_images.json` — maps each of the 8 car pillars to a source image
+  URL. TikTok (and likely Instagram) reject text-only posts, so every post
+  needs media attached; `schedule_posts.py` downloads and uploads each
+  pillar's image once per run and reuses it across that pillar's posts.
 
 ## Calendar structure
 
@@ -69,7 +74,21 @@ expect, check Postiz's current API docs and adjust `CHANNELS_URL` /
 
 `schedule_posts.py` matches channels by looking for the handle
 (`appleuser25996918` for TikTok, `biz.7878` for Instagram) inside common
-response fields (`username`, `handle`, `name`, `displayName`, `identifier`),
-disambiguating by provider if a handle matches more than one channel. If
-Postiz's actual response shape uses different field names, extend
-`_channel_text_blob()` / `_channel_provider()` in `schedule_posts.py`.
+response fields (`username`, `handle`, `name`, `displayName`, `identifier`,
+`profile`), disambiguating by provider if a handle matches more than one
+channel. If Postiz's actual response shape uses different field names,
+extend `_channel_text_blob()` / `_channel_provider()` in
+`schedule_posts.py`.
+
+## Image upload assumption to double check
+
+`UPLOAD_URL` (`POST /public/v1/upload`) and the exact shape Postiz expects
+inside `posts[].value[].image` were not verifiable from the authoring
+environment either. `upload_media()` uploads each pillar's image as
+multipart form data and assumes whatever JSON Postiz's upload endpoint
+returns can be dropped as-is into the post payload's `image` array. If
+`upload_media()` 404s, or the post payload's `image` field gets rejected on
+a real run, check Postiz's docs for the actual upload endpoint/response
+shape and adjust `upload_media()` / `build_post_payload()` accordingly —
+same pattern as the endpoint and schema fixes above, both of which were
+nailed down from Postiz's own validation error messages on live test runs.
