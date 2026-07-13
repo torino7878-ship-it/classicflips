@@ -67,9 +67,15 @@ TIKTOK_HANDLE = "appleuser25996918"
 INSTAGRAM_HANDLE = "biz.7878"
 
 REQUEST_TIMEOUT = 30
-RATE_LIMIT_SECONDS = 0.75
+# A live full-run (270 posts) hit Postiz's rate limiter hard at the
+# original 0.75s/4-retry settings -- 157/270 posts permanently failed on
+# repeated 429s. Slower pacing + a dedicated, much more patient backoff
+# for 429 specifically (Postiz's throttle window appears to be on the
+# order of a minute, not seconds) fixes that.
+RATE_LIMIT_SECONDS = 3.0
 MAX_RETRIES = 4
 RETRY_BACKOFF_BASE = 2.0
+RATE_LIMIT_RETRY_BASE_SECONDS = 20.0
 
 
 def api_request(method: str, url: str, api_key: str, body: dict | None = None) -> dict:
@@ -86,7 +92,13 @@ def api_request(method: str, url: str, api_key: str, body: dict | None = None) -
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as e:
             body_text = e.read().decode("utf-8", errors="replace")
-            if e.code == 429 or e.code >= 500:
+            if e.code == 429:
+                last_error = f"HTTP {e.code}: {body_text}"
+                sleep_for = RATE_LIMIT_RETRY_BASE_SECONDS * attempt
+                print(f"  [retry {attempt}/{MAX_RETRIES}] rate limited -- sleeping {sleep_for:.1f}s")
+                time.sleep(sleep_for)
+                continue
+            if e.code >= 500:
                 last_error = f"HTTP {e.code}: {body_text}"
                 sleep_for = RETRY_BACKOFF_BASE ** attempt
                 print(f"  [retry {attempt}/{MAX_RETRIES}] {last_error} -- sleeping {sleep_for:.1f}s")
