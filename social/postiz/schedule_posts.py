@@ -63,7 +63,7 @@ CALENDAR_PATH = Path(__file__).parent / "calendar.json"
 RESULTS_PATH = Path(__file__).parent / "schedule_results.csv"
 PILLAR_IMAGES_PATH = Path(__file__).parent / "pillar_images.json"
 
-TIKTOK_HANDLE = "appleuser25996918"
+TIKTOK_HANDLE = "classicflips1"
 INSTAGRAM_HANDLE = "biz.7878"
 
 REQUEST_TIMEOUT = 30

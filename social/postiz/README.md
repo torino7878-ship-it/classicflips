@@ -73,7 +73,7 @@ expect, check Postiz's current API docs and adjust `CHANNELS_URL` /
 ## Channel matching
 
 `schedule_posts.py` matches channels by looking for the handle
-(`appleuser25996918` for TikTok, `biz.7878` for Instagram) inside common
+(`classicflips1` for TikTok, `biz.7878` for Instagram) inside common
 response fields (`username`, `handle`, `name`, `displayName`, `identifier`,
 `profile`), disambiguating by provider if a handle matches more than one
 channel. If Postiz's actual response shape uses different field names,
